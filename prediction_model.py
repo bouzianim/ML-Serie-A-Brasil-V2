@@ -1,5 +1,6 @@
 import math
 import numpy as np
+import streamlit as st
 
 class PredictionModel:
     def poisson(self, k, lam):
@@ -180,43 +181,87 @@ class PredictionModel:
         return {
             'primary_hda': {
                 'prediction': hda_pred,
-                'confidence': f"{hda_conf:.1f}%",
+                'confidence': hda_conf,
                 'details': "Using Method 1 with 11 scores"
             },
             'primary_ou': {
                 'prediction': ou_pred,
-                'confidence': f"{ou_conf:.1f}%",
+                'confidence': ou_conf,
                 'details': "Using Method 1 with 17 scores"
             },
             'special_patterns': {
                 'high_confidence_hda': {
                     'triggered': high_confidence_hda_signal,
                     'prediction': hda_pred_hc if high_confidence_hda_signal else "N/A",
-                    'confidence': f"{hda_conf_hc:.1f}%" if high_confidence_hda_signal else "N/A",
+                    'confidence': hda_conf_hc if high_confidence_hda_signal else "N/A",
                     'details': "Signal for H/D/A when confidence is >= 60% using 10 scores"
                 },
                 'high_avg_pattern_ou': {
                     'triggered': high_avg_pattern_signal,
                     'prediction': "OVER 2.5" if high_avg_pattern_signal else "N/A",
-                    'confidence': f"{ou_conf_hap:.1f}%" if high_avg_pattern_signal else "N/A",
+                    'confidence': ou_conf_hap if high_avg_pattern_signal else "N/A",
                     'details': "Signal for OVER 2.5 when weighted goal average is >= 2.5 using 8 scores"
                 }
             }
         }
 
-if __name__ == '__main__':
-    import argparse
-    import json
-
-    parser = argparse.ArgumentParser(description='Predict match outcomes based on betting odds.')
-    parser.add_argument('--home', type=float, required=True, help='Home win odds')
-    parser.add_argument('--draw', type=float, required=True, help='Draw odds')
-    parser.add_argument('--away', type=float, required=True, help='Away win odds')
-
-    args = parser.parse_args()
+def main():
+    st.set_page_config(page_title="⚽ Match Predictor", layout="wide")
+    st.title("🎯 Football Match Outcome Predictor")
+    st.markdown("Enter the 1X2 odds for a match to get predictions based on an optimized Poisson model.")
 
     model = PredictionModel()
-    predictions = model.predict(args.home, args.draw, args.away)
 
-    print("---  Prediction Results ---")
-    print(json.dumps(predictions, indent=4))
+    with st.sidebar:
+        st.header("Match Odds")
+        odds_home = st.number_input("Home Win Odds", min_value=1.01, value=2.5, step=0.1)
+        odds_draw = st.number_input("Draw Odds", min_value=1.01, value=3.2, step=0.1)
+        odds_away = st.number_input("Away Win Odds", min_value=1.01, value=2.8, step=0.1)
+
+        predict_button = st.button("🔮 Get Prediction", use_container_width=True)
+
+    if predict_button:
+        with st.spinner('🧠 Analyzing odds and running predictions...'):
+            predictions = model.predict(odds_home, odds_draw, odds_away)
+
+            st.subheader("📈 Primary Predictions")
+            col1, col2 = st.columns(2)
+            with col1:
+                hda = predictions['primary_hda']
+                st.metric(
+                    label="Match Outcome (H/D/A)",
+                    value=hda['prediction'],
+                    delta=f"{hda['confidence']:.1f}% Confidence"
+                )
+            with col2:
+                ou = predictions['primary_ou']
+                st.metric(
+                    label="Goal Total (Over/Under 2.5)",
+                    value=ou['prediction'],
+                    delta=f"{ou['confidence']:.1f}% Confidence"
+                )
+
+            st.subheader("⚡️ High-Accuracy Pattern Signals")
+            st.info("These signals identify specific scenarios where the model has historically shown higher accuracy.")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                hda_sp = predictions['special_patterns']['high_confidence_hda']
+                if hda_sp['triggered']:
+                    st.success(f"✅ High-Confidence H/D/A Signal: **{hda_sp['prediction']}**")
+                    st.write(f"Confidence: **{hda_sp['confidence']:.1f}%**")
+                    st.write(f"_{hda_sp['details']}_")
+                else:
+                    st.write("No High-Confidence H/D/A signal.")
+
+            with col2:
+                ou_sp = predictions['special_patterns']['high_avg_pattern_ou']
+                if ou_sp['triggered']:
+                    st.success(f"✅ High-AVG-Pattern O/U Signal: **{ou_sp['prediction']}**")
+                    st.write(f"Confidence: **{ou_sp['confidence']:.1f}%**")
+                    st.write(f"_{ou_sp['details']}_")
+                else:
+                    st.write("No High-AVG-Pattern O/U signal.")
+
+if __name__ == '__main__':
+    main()
